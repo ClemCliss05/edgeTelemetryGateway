@@ -23,5 +23,12 @@ jobs:
       - name: Lint
         run: ruff check .
 
+      - name: Start MQTT broker
+        run: docker compose up -d --wait
+
       - name: Test
         run: python -m pytest -q
+
+      - name: Stop MQTT broker
+        if: always()
+        run: docker compose down -v
