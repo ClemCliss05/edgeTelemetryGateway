@@ -1,11 +1,10 @@
 
-import json
 import logging
 
 import paho.mqtt.client as mqtt
 
-from edge_gateway.storage import initialize_database, store_telemetry
-from edge_gateway.telemetry import validate_telemetry
+from edge_gateway.processing import process_payload
+from edge_gateway.storage import initialize_database
 
 BROKER_HOST = "127.0.0.1"
 BROKER_PORT = 1883
@@ -67,24 +66,8 @@ def on_subscribe(client, userdata, mid, reason_code_list, properties):
 
 
 def on_message(client, userdata, msg):
-    """Decode, validate, and store one MQTT message."""
-    try:
-        message = json.loads(msg.payload.decode("utf-8"))
-        telemetry = validate_telemetry(message)
-        store_telemetry(telemetry)
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
-        logger.warning("Rejected message on %s: %s", msg.topic, error)
-        return
-    except Exception as error:
-        logger.exception("Failed to process message: %s", error)
-        return
-
-    logger.info(
-        "Stored telemetry from %s: temperature=%s, humidity=%s",
-        telemetry["device_id"],
-        telemetry["temperature"],
-        telemetry["humidity"],
-    )
+    """Process one received MQTT message."""
+    process_payload(msg.payload, msg.topic)
 
 
 def main():
