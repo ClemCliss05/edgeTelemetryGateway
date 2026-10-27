@@ -7,6 +7,8 @@ import time
 import uuid
 from pathlib import Path
 
+import pytest
+
 BROKER_SERVICE = "mosquitto"
 BROKER_HOST = "127.0.0.1"
 BROKER_PORT = 1883
@@ -39,6 +41,12 @@ def wait_for_telemetry(db_path, device_id, timeout=TIMEOUT):
 
 def test_gateway_recovers_after_broker_restart(tmp_path):
     """Verify telemetry processing before and after an MQTT broker restart."""
+    gateway_password = os.getenv("MQTT_TEST_GATEWAY_PASSWORD")
+    simulator_password = os.getenv("MQTT_TEST_SIMULATOR_PASSWORD")
+
+    if not gateway_password or not simulator_password:
+        pytest.skip("MQTT test credentials are required")
+
     project_root = Path(__file__).resolve().parents[2]
     source_path = project_root / "src"
     db_path = tmp_path / "data" / "telemetry.db"
@@ -66,6 +74,8 @@ def test_gateway_recovers_after_broker_restart(tmp_path):
                 "docker", "compose", "exec", "-T", BROKER_SERVICE,
                 "mosquitto_pub",
                 "-h", "localhost",
+                "-u", "simulator",
+                "-P", simulator_password,
                 "-t", topic,
                 "-q", "1",
                 "-r",
@@ -84,6 +94,8 @@ def test_gateway_recovers_after_broker_restart(tmp_path):
                 "docker", "compose", "exec", "-T", BROKER_SERVICE,
                 "mosquitto_pub",
                 "-h", "localhost",
+                "-u", "simulator",
+                "-P", simulator_password,
                 "-t", topic,
                 "-q", "1",
                 "-r",
@@ -103,6 +115,8 @@ def test_gateway_recovers_after_broker_restart(tmp_path):
 
         gateway_env = os.environ.copy()
         gateway_env["PYTHONPATH"] = str(source_path)
+        gateway_env["MQTT_USERNAME"] = "gateway"
+        gateway_env["MQTT_PASSWORD"] = gateway_password
 
         gateway = subprocess.Popen(
             [sys.executable, "-m", "edge_gateway.gateway"],

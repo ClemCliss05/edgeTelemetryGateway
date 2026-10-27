@@ -1,0 +1,5 @@
+user gateway
+topic read sensors/+/telemetry
+
+user simulator
+topic write sensors/+/telemetry
