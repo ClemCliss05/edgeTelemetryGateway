@@ -17,6 +17,7 @@ htmlcov/
 .env.*
 !.env.example
 config/config.yaml
+secrets/
 
 # Local databases and runtime data
 *.db

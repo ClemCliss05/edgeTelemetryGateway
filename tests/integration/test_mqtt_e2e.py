@@ -17,6 +17,12 @@ BROKER_PORT = 1883
 
 def test_mqtt_message_is_stored_by_gateway(tmp_path):
     """Verify that a real MQTT message reaches SQLite through the gateway."""
+    gateway_password = os.getenv("MQTT_TEST_GATEWAY_PASSWORD")
+    simulator_password = os.getenv("MQTT_TEST_SIMULATOR_PASSWORD")
+
+    if not gateway_password or not simulator_password:
+        pytest.skip("MQTT test credentials are required")
+
     source_path = Path(__file__).resolve().parents[2] / "src"
     database_path = tmp_path / "data" / "telemetry.db"
 
@@ -45,9 +51,12 @@ def test_mqtt_message_is_stored_by_gateway(tmp_path):
         client_id=f"e2e-publisher-{uuid.uuid4().hex}",
     )
     publisher.on_connect = on_connect
+    publisher.username_pw_set("simulator", simulator_password)
 
     gateway_env = os.environ.copy()
     gateway_env["PYTHONPATH"] = str(source_path)
+    gateway_env["MQTT_USERNAME"] = "gateway"
+    gateway_env["MQTT_PASSWORD"] = gateway_password
 
     gateway = None
     publisher_started = False

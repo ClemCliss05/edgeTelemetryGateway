@@ -1,5 +1,5 @@
-
 import logging
+import os
 
 import paho.mqtt.client as mqtt
 
@@ -73,10 +73,17 @@ def on_message(client, userdata, msg):
 def main():
     initialize_database()
 
+    username = os.getenv("MQTT_USERNAME", "gateway")
+    password = os.getenv("MQTT_PASSWORD")
+
+    if not password:
+        raise RuntimeError("MQTT_PASSWORD environment variable is required")
+
     client = mqtt.Client(
         mqtt.CallbackAPIVersion.VERSION2,
         client_id="edge-telemetry-gateway",
     )
+    client.username_pw_set(username, password)
 
     # Lead Paho logs toards my logs
     client.enable_logger(logger)

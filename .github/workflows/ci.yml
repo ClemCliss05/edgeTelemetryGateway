@@ -10,6 +10,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    env:
+      MQTT_TEST_GATEWAY_PASSWORD: ci-gateway-password
+      MQTT_TEST_SIMULATOR_PASSWORD: ci-simulator-password
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,6 +26,28 @@ jobs:
 
       - name: Lint
         run: ruff check .
+
+      - name: Create temporary MQTT credentials
+        run: |
+          mkdir -p secrets/mosquitto
+
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$PWD/secrets/mosquitto:/mosquitto/secrets" \
+            --entrypoint mosquitto_passwd \
+            eclipse-mosquitto:2 \
+            -b -c /mosquitto/secrets/password_file \
+            gateway "$MQTT_TEST_GATEWAY_PASSWORD"
+
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$PWD/secrets/mosquitto:/mosquitto/secrets" \
+            --entrypoint mosquitto_passwd \
+            eclipse-mosquitto:2 \
+            -b /mosquitto/secrets/password_file \
+            simulator "$MQTT_TEST_SIMULATOR_PASSWORD"
+
+          chmod 644 secrets/mosquitto/password_file
 
       - name: Start MQTT broker
         run: docker compose up -d --wait

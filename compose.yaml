@@ -6,7 +6,8 @@ services:
     ports:
       - "127.0.0.1:1883:1883"
     volumes:
-      - ./config/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./config/mosquitto:/mosquitto/config:ro
+      - ./secrets/mosquitto/password_file:/mosquitto/secrets/password_file:ro
       - mosquitto_data:/mosquitto/data
 
 volumes:

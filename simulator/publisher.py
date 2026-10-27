@@ -1,5 +1,5 @@
-
 import json
+import os
 import random
 import time
 from datetime import UTC, datetime
@@ -17,6 +17,14 @@ def main():
         mqtt.CallbackAPIVersion.VERSION2,
         client_id="edge-telemetry-simulator",
     )
+
+    username = os.getenv("MQTT_USERNAME", "simulator")
+    password = os.getenv("MQTT_PASSWORD")
+
+    if not password:
+        raise RuntimeError("MQTT_PASSWORD environment variable is required")
+
+    client.username_pw_set(username, password)
 
     client.connect(BROKER_HOST, BROKER_PORT, keepalive=60)
     client.loop_start()
