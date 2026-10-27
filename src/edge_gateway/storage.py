@@ -7,7 +7,7 @@ DEFAULT_DB_PATH = Path("data/telemetry.db")
 
 
 def initialize_database(db_path: Path = DEFAULT_DB_PATH) -> None:
-    """Create the database and telemetry table if they do not exist."""
+    """Create the database, telemetry table, and unique index if needed."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     with sqlite3.connect(db_path) as connection:
@@ -24,6 +24,13 @@ def initialize_database(db_path: Path = DEFAULT_DB_PATH) -> None:
             """
         )
 
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_telemetry_device_timestamp
+            ON telemetry (device_id, timestamp)
+            """
+        )
+
 
 def store_telemetry(
     message: dict[str, Any],
@@ -33,7 +40,7 @@ def store_telemetry(
     with sqlite3.connect(db_path) as connection:
         connection.execute(
             """
-            INSERT INTO telemetry (
+            INSERT OR IGNORE INTO telemetry (
                 device_id, timestamp, temperature, humidity
             ) VALUES (?, ?, ?, ?)
             """,
