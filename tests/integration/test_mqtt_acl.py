@@ -4,14 +4,18 @@
 import os
 import threading
 import uuid
+from pathlib import Path
 
 import paho.mqtt.client as mqtt
 import pytest
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+CA_CERT = PROJECT_ROOT / "secrets/mosquitto/ca.crt"
+
 HOST = "127.0.0.1"
-PORT = 1883
+PORT = 8883
 GATEWAY_PASSWORD = os.getenv("MQTT_TEST_GATEWAY_PASSWORD")
-SIMULATOR_PASSWORD = os.getenv("MQTT_TEST_SIMULATOR_PASSWORD")
+PUBLISHER_PASSWORD = os.getenv("MQTT_TEST_PUBLISHER_PASSWORD")
 
 pytestmark = pytest.mark.integration
 
@@ -21,8 +25,11 @@ def make_client(username=None, password=None):
         mqtt.CallbackAPIVersion.VERSION2,
         protocol=mqtt.MQTTv5,
     )
+    client.tls_set(ca_certs=str(CA_CERT))
+
     if username is not None:
         client.username_pw_set(username, password)
+
     return client
 
 
@@ -84,20 +91,20 @@ def test_anonymous_connection_is_rejected():
 
 @pytest.fixture
 def credentials():
-    if not GATEWAY_PASSWORD or not SIMULATOR_PASSWORD:
+    if not GATEWAY_PASSWORD or not PUBLISHER_PASSWORD:
         pytest.skip(
             "Set MQTT_TEST_GATEWAY_PASSWORD and "
-            "MQTT_TEST_SIMULATOR_PASSWORD to run credential tests"
+            "MQTT_TEST_PUBLISHER_PASSWORD to run credential tests"
         )
-    return GATEWAY_PASSWORD, SIMULATOR_PASSWORD
+    return GATEWAY_PASSWORD, PUBLISHER_PASSWORD
 
 
-def test_gateway_can_read_but_simulator_cannot(credentials):
-    gateway_password, simulator_password = credentials
+def test_gateway_can_read_but_publisher_cannot(credentials):
+    gateway_password, publisher_password = credentials
     topic = f"sensors/acl-test-{uuid.uuid4().hex}/telemetry"
 
     gateway = make_client("gateway", gateway_password)
-    simulator = make_client("simulator", simulator_password)
+    publisher = make_client("publisher", publisher_password)
     received = threading.Event()
     messages = []
 
@@ -108,10 +115,10 @@ def test_gateway_can_read_but_simulator_cannot(credentials):
 
     try:
         assert not connect_client(gateway).is_failure
-        assert not connect_client(simulator).is_failure
+        assert not connect_client(publisher).is_failure
 
-        # Simulator is allowed to publish telemetry.
-        publish(simulator, topic, b"ACL_TEST", retain=True)
+        # Publisher is allowed to publish telemetry.
+        publish(publisher, topic, b"ACL_TEST", retain=True)
 
         # Gateway must receive the retained telemetry.
         gateway_codes = subscribe(gateway, topic)
@@ -119,27 +126,27 @@ def test_gateway_can_read_but_simulator_cannot(credentials):
         assert received.wait(3), "Gateway did not receive telemetry"
         assert messages[-1] == b"ACL_TEST"
 
-        # Simulator must not receive telemetry published to this topic.
-        simulator_messages = []
-        simulator_received = threading.Event()
+        # Publisher must not receive telemetry published to this topic.
+        publisher_messages = []
+        publisher_received = threading.Event()
 
-        simulator.on_message = lambda _c, _u, msg: (
-            simulator_messages.append(msg.payload),
-            simulator_received.set(),
+        publisher.on_message = lambda _c, _u, msg: (
+            publisher_messages.append(msg.payload),
+            publisher_received.set(),
         )
 
-        subscribe(simulator, topic)
-        assert not simulator_received.wait(1), (
-            "Simulator unexpectedly received telemetry"
+        subscribe(publisher, topic)
+        assert not publisher_received.wait(1), (
+            "Publisher unexpectedly received telemetry"
         )
-        assert simulator_messages == []
+        assert publisher_messages == []
 
     finally:
         # Remove the retained test message using the authorized writer.
         try:
-            publish(simulator, topic, b"", retain=True)
+            publish(publisher, topic, b"", retain=True)
         except (AssertionError, OSError, ValueError):
             pass
         disconnect_client(gateway)
-        disconnect_client(simulator)
+        disconnect_client(publisher)
 

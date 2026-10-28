@@ -4,10 +4,14 @@ services:
     container_name: edge-mosquitto
     restart: unless-stopped
     ports:
-      - "127.0.0.1:1883:1883"
+      - "127.0.0.1:8883:8883"
     volumes:
-      - ./config/mosquitto:/mosquitto/config:ro
+      - ./config/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./secrets/mosquitto/config/acl_file:/mosquitto/config/acl_file:ro
       - ./secrets/mosquitto/password_file:/mosquitto/secrets/password_file:ro
+      - ./secrets/mosquitto/ca.crt:/mosquitto/certs/ca.crt:ro
+      - ./secrets/mosquitto/certs/server.crt:/mosquitto/certs/server.crt:ro
+      - ./secrets/mosquitto/certs/server.key:/mosquitto/certs/server.key:ro
       - mosquitto_data:/mosquitto/data
 
 volumes:

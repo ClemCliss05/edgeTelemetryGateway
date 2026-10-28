@@ -1,3 +1,4 @@
+
 name: CI
 
 on:
@@ -12,7 +13,7 @@ jobs:
 
     env:
       MQTT_TEST_GATEWAY_PASSWORD: ci-gateway-password
-      MQTT_TEST_SIMULATOR_PASSWORD: ci-simulator-password
+      MQTT_TEST_PUBLISHER_PASSWORD: ci-publisher-password
 
     steps:
       - uses: actions/checkout@v4
@@ -26,6 +27,16 @@ jobs:
 
       - name: Lint
         run: ruff check .
+
+      - name: Generate development TLS certificates
+        run: |
+          ./scripts/generate-dev-certs.sh
+          mkdir -p secrets/mosquitto/config
+          cp config/mosquitto/acl_file secrets/mosquitto/config/acl_file
+
+          # Mosquitto runs as UID/GID 1883 in the container.
+          sudo chown 1883:1883 secrets/mosquitto/config/acl_file
+          chmod 640 secrets/mosquitto/config/acl_file
 
       - name: Create temporary MQTT credentials
         run: |
@@ -45,7 +56,7 @@ jobs:
             --entrypoint mosquitto_passwd \
             eclipse-mosquitto:2 \
             -b /mosquitto/secrets/password_file \
-            simulator "$MQTT_TEST_SIMULATOR_PASSWORD"
+            publisher "$MQTT_TEST_PUBLISHER_PASSWORD"
 
           chmod 644 secrets/mosquitto/password_file
 

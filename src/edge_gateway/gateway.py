@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 
 import paho.mqtt.client as mqtt
 
@@ -7,7 +8,7 @@ from edge_gateway.processing import process_payload
 from edge_gateway.storage import initialize_database
 
 BROKER_HOST = "127.0.0.1"
-BROKER_PORT = 1883
+BROKER_PORT = 8883
 TOPIC = "sensors/+/telemetry"
 
 logging.basicConfig(
@@ -73,16 +74,25 @@ def on_message(client, userdata, msg):
 def main():
     initialize_database()
 
-    username = os.getenv("MQTT_USERNAME", "gateway")
-    password = os.getenv("MQTT_PASSWORD")
+    username = os.getenv("MQTT_GATEWAY_USERNAME", "gateway")
+    password = os.getenv("MQTT_GATEWAY_PASSWORD")
 
     if not password:
-        raise RuntimeError("MQTT_PASSWORD environment variable is required")
+        raise RuntimeError("MQTT_GATEWAY_PASSWORD environment variable is required")
+
+    ca_cert = os.getenv("MQTT_CA_CERT")
+
+    if not ca_cert:
+        raise RuntimeError("MQTT_CA_CERT environment variable is required")
+
+    if not Path(ca_cert).is_file():
+        raise RuntimeError(f"MQTT CA certificate not found: {ca_cert}")
 
     client = mqtt.Client(
         mqtt.CallbackAPIVersion.VERSION2,
         client_id="edge-telemetry-gateway",
     )
+    client.tls_set(ca_certs=ca_cert)
     client.username_pw_set(username, password)
 
     # Lead Paho logs toards my logs

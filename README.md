@@ -9,7 +9,7 @@ Python, MQTT, data validation, testing, and containerization.
 ## Architecture
 
 ```text
-MQTT Simulator
+MQTT Publisher
       |
       | MQTT / JSON
       v
@@ -29,7 +29,7 @@ Python Gateway
 
 ## Features
 
-- MQTT telemetry publishing with a Python simulator.
+- MQTT telemetry publishing with a Python publisher.
 - MQTT subscription using Paho MQTT.
 - JSON decoding and input validation.
 - Validation of required fields and numeric measurement ranges.
@@ -87,7 +87,7 @@ In a terminal:
 .venv/bin/python -m edge_gateway.gateway
 ```
 
-### 4. Start the telemetry simulator
+### 4. Start the telemetry publisher
 
 In a second terminal:
 
@@ -95,7 +95,7 @@ In a second terminal:
 .venv/bin/python simulator/publisher.py
 ```
 
-The simulator publishes telemetry periodically. The gateway logs
+The publisher publishes telemetry periodically. The gateway logs
 successfully stored measurements.
 
 Stop either process with `Ctrl+C`. Stop the broker when it is no longer
@@ -146,7 +146,7 @@ Run the linter:
 
 ## Current scope
 
-The current MVP runs the gateway and simulator directly on the host while
+The current MVP runs the gateway and publisher directly on the host while
 Mosquitto runs in Docker Compose. The Dockerfile is an initial step toward
 containerizing the gateway.
 

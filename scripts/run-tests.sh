@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 cleanup() {
-    unset MQTT_TEST_GATEWAY_PASSWORD MQTT_TEST_SIMULATOR_PASSWORD
+    unset MQTT_TEST_GATEWAY_PASSWORD MQTT_TEST_PUBLISHER_PASSWORD
 }
 trap cleanup EXIT
 
@@ -18,7 +18,7 @@ source .env
 set +a
 
 : "${MQTT_TEST_GATEWAY_PASSWORD:?Missing gateway password in .env}"
-: "${MQTT_TEST_SIMULATOR_PASSWORD:?Missing simulator password in .env}"
+: "${MQTT_TEST_PUBLISHER_PASSWORD:?Missing publisher password in .env}"
 
 docker compose up -d --wait
 

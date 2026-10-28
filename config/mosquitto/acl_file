@@ -1,5 +1,5 @@
 user gateway
 topic read sensors/+/telemetry
 
-user simulator
+user publisher
 topic write sensors/+/telemetry

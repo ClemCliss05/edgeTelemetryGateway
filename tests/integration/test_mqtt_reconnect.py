@@ -11,8 +11,11 @@ from pathlib import Path
 import pytest
 
 BROKER_SERVICE = "mosquitto"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+CA_CERT = PROJECT_ROOT / "secrets/mosquitto/ca.crt"
+
 BROKER_HOST = "127.0.0.1"
-BROKER_PORT = 1883
+BROKER_PORT = 8883
 TIMEOUT = 30
 
 
@@ -57,9 +60,9 @@ def wait_for_broker(timeout=10):
 def test_gateway_recovers_after_broker_restart(tmp_path):
     """Verify telemetry processing before and after an MQTT broker restart."""
     gateway_password = os.getenv("MQTT_TEST_GATEWAY_PASSWORD")
-    simulator_password = os.getenv("MQTT_TEST_SIMULATOR_PASSWORD")
+    publisher_password = os.getenv("MQTT_TEST_PUBLISHER_PASSWORD")
 
-    if not gateway_password or not simulator_password:
+    if not gateway_password or not publisher_password:
         pytest.skip("MQTT test credentials are required")
 
     project_root = Path(__file__).resolve().parents[2]
@@ -89,8 +92,10 @@ def test_gateway_recovers_after_broker_restart(tmp_path):
                 "docker", "compose", "exec", "-T", BROKER_SERVICE,
                 "mosquitto_pub",
                 "-h", "localhost",
-                "-u", "simulator",
-                "-P", simulator_password,
+                "-p", "8883",
+                "--cafile", "/mosquitto/certs/ca.crt",
+                "-u", "publisher",
+                "-P", publisher_password,
                 "-t", topic,
                 "-q", "1",
                 "-r",
@@ -109,8 +114,10 @@ def test_gateway_recovers_after_broker_restart(tmp_path):
                 "docker", "compose", "exec", "-T", BROKER_SERVICE,
                 "mosquitto_pub",
                 "-h", "localhost",
-                "-u", "simulator",
-                "-P", simulator_password,
+                "-p", "8883",
+                "--cafile", "/mosquitto/certs/ca.crt",
+                "-u", "publisher",
+                "-P", publisher_password,
                 "-t", topic,
                 "-q", "1",
                 "-r",
@@ -130,8 +137,9 @@ def test_gateway_recovers_after_broker_restart(tmp_path):
 
         gateway_env = os.environ.copy()
         gateway_env["PYTHONPATH"] = str(source_path)
-        gateway_env["MQTT_USERNAME"] = "gateway"
-        gateway_env["MQTT_PASSWORD"] = gateway_password
+        gateway_env["MQTT_GATEWAY_USERNAME"] = "gateway"
+        gateway_env["MQTT_GATEWAY_PASSWORD"] = gateway_password
+        gateway_env["MQTT_CA_CERT"] = str(CA_CERT)
 
         gateway = subprocess.Popen(
             [sys.executable, "-m", "edge_gateway.gateway"],
