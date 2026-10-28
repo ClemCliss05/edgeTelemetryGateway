@@ -1,5 +1,6 @@
 import json
 import os
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -37,6 +38,20 @@ def wait_for_telemetry(db_path, device_id, timeout=TIMEOUT):
         time.sleep(0.2)
 
     return None
+
+
+def wait_for_broker(timeout=10):
+    """Wait until the MQTT broker accepts TCP connections."""
+    deadline = time.monotonic() + timeout
+
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection((BROKER_HOST, BROKER_PORT), timeout=1):
+                return
+        except OSError:
+            time.sleep(0.25)
+
+    raise AssertionError("MQTT broker did not become reachable")
 
 
 def test_gateway_recovers_after_broker_restart(tmp_path):
@@ -147,6 +162,9 @@ def test_gateway_recovers_after_broker_restart(tmp_path):
         compose("stop", BROKER_SERVICE)
         time.sleep(2)
         compose("up", "-d", "--wait")
+
+        # Avoid to publish while MQTT port is unavailable
+        wait_for_broker()
 
         # Publish while the gateway may still be reconnecting.
         # Retained delivery lets the gateway receive it after re-subscribing.
