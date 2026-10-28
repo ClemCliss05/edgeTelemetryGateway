@@ -36,7 +36,7 @@ jobs:
 
           # Mosquitto runs as UID/GID 1883 in the container.
           sudo chown 1883:1883 secrets/mosquitto/config/acl_file
-          chmod 640 secrets/mosquitto/config/acl_file
+          sudo chmod 640 secrets/mosquitto/config/acl_file
 
       - name: Create temporary MQTT credentials
         run: |
