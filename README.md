@@ -1,46 +1,78 @@
 # Edge Telemetry Gateway
 
-A lightweight Python edge application that ingests MQTT telemetry,
-validates incoming messages, and stores measurements in SQLite.
+A lightweight Python edge application that collects MQTT telemetry from connected devices, validates incoming messages, and stores measurements locally in SQLite.
 
-This project is a hands-on portfolio project focused on edge computing,
-Python, MQTT, data validation, testing, and containerization.
+This project demonstrates practical edge computing concepts: MQTT communication, TLS security, input validation, persistent storage, reconnection handling, automated testing, and containerized infrastructure.
 
 ## Architecture
 
 ```text
-MQTT Publisher
-      |
-      | MQTT / JSON
-      v
-Mosquitto Broker
-      |
-      | sensors/+/telemetry
-      v
-Python Gateway
-      |
-      +--> Decode JSON
-      +--> Validate telemetry
-      +--> Store valid measurements
-                    |
-                    v
-                 SQLite
++-------------------+
+| MQTT Publisher    |
+| Python Simulator |
++---------+---------+
+          |
+          | MQTT over TLS (QoS 1)
+          v
++-------------------+
+| Mosquitto Broker  |
+| Docker Compose    |
+| TLS / Auth / ACL  |
++---------+---------+
+          |
+          | sensors/+/telemetry
+          v
++-------------------+
+| Python Gateway    |
+|                   |
+| - JSON decoding   |
+| - Validation      |
+| - Processing      |
+| - Reconnection    |
++---------+---------+
+          |
+          v
++-------------------+
+| SQLite            |
+| Local persistence |
++-------------------+
 ```
 
 ## Features
 
-- MQTT telemetry publishing with a Python publisher.
-- MQTT subscription using Paho MQTT.
-- JSON decoding and input validation.
-- Validation of required fields and numeric measurement ranges.
-- SQLite persistence for valid telemetry.
-- Unit tests with pytest.
-- Code quality checks with Ruff.
-- Local MQTT broker managed with Docker Compose.
+### MQTT communication
+- Python telemetry publisher using Paho MQTT 2.x.
+- Gateway subscription to `sensors/+/telemetry`.
+- QoS 1 for at-least-once message delivery.
+- TLS-encrypted MQTT communication.
+- Username/password authentication.
+- Topic-level access control using Mosquitto ACLs.
+
+### Reliability
+- Automatic MQTT reconnection with exponential backoff.
+- Gateway resubscribes after reconnecting.
+- Publisher resumes telemetry publication after reconnecting.
+- Graceful shutdown on Ctrl+C.
+- Duplicate telemetry protection through a unique database constraint.
+
+The publisher does not buffer messages while disconnected. It resumes publishing new measurements once the broker becomes available again.
+
+### Data handling
+- JSON decoding and telemetry validation.
+- Required-field and measurement-range checks.
+- Invalid messages are rejected and logged.
+- Valid measurements are stored in SQLite.
+
+### Development and testing
+- Docker Compose for the MQTT broker.
+- pytest unit and integration tests.
+- Ruff linting.
+- GitHub Actions CI workflow.
+- Development TLS certificate generation script.
 
 ## Telemetry format
 
-Messages are JSON objects containing the following fields:
+Messages use the following JSON structure:
 
 ```json
 {
@@ -51,105 +83,271 @@ Messages are JSON objects containing the following fields:
 }
 ```
 
-The gateway subscribes to `sensors/+/telemetry`.
-Valid messages are stored in the local SQLite database at
-`data/telemetry.db` by default. Invalid messages are rejected and logged.
+The publisher sends messages to:
+
+```text
+sensors/<device_id>/telemetry
+```
+
+The gateway subscribes to:
+
+```text
+sensors/+/telemetry
+```
+
+By default, valid measurements are stored in `data/telemetry.db`.
 
 ## Requirements
 
+- Linux
 - Python 3.11 or later
-- Docker Engine and Docker Compose
+- Docker Engine
+- Docker Compose
+- OpenSSL
 - Git
 
-## Run locally
+## Local setup
 
-### 1. Install the Python dependencies
+### 1. Install dependencies
 
 ```bash
+git clone https://github.com/ClemCliss05/edgeTelemetryGateway.git
+cd edgeTelemetryGateway
+
 python3 -m venv .venv
 .venv/bin/python -m pip install -e ".[dev]"
 ```
 
-### 2. Start the MQTT broker
+### 2. Configure environment variables
 
 ```bash
-docker compose up -d mosquitto
+cp .env.example .env
+```
+
+Edit `.env` and configure your gateway and publisher passwords.
+
+Use the same passwords when creating the corresponding Mosquitto accounts in the next step.
+
+Never commit `.env` or the contents of the `secrets/` directory.
+
+### 3. Generate development TLS certificates
+
+```bash
+./scripts/generate-dev-certs.sh
+```
+
+This creates a local certificate authority and a server certificate for the Mosquitto broker.
+
+These certificates are intended for local development only.
+
+### 4. Configure Mosquitto ACLs
+
+```bash
+mkdir -p secrets/mosquitto/config
+
+cp config/mosquitto/acl_file \
+   secrets/mosquitto/config/acl_file
+```
+
+The ACL configuration grants:
+- `gateway`: read access to telemetry topics.
+- `publisher`: write access to telemetry topics.
+
+### 5. Create MQTT credentials
+
+Create the gateway account:
+
+```bash
+docker run --rm -it \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD/secrets/mosquitto:/mosquitto/secrets" \
+  --entrypoint mosquitto_passwd \
+  eclipse-mosquitto:2 \
+  -c /mosquitto/secrets/password_file gateway
+```
+
+Create the publisher account:
+
+```bash
+docker run --rm -it \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD/secrets/mosquitto:/mosquitto/secrets" \
+  --entrypoint mosquitto_passwd \
+  eclipse-mosquitto:2 \
+  /mosquitto/secrets/password_file publisher
+```
+
+Enter the same passwords configured in `.env`.
+
+Set permissions for the broker container:
+
+```bash
+sudo chown 1883:1883 \
+  secrets/mosquitto/config/acl_file \
+  secrets/mosquitto/password_file
+
+sudo chmod 640 \
+  secrets/mosquitto/config/acl_file \
+  secrets/mosquitto/password_file
+```
+
+### 6. Start the MQTT broker
+
+```bash
+docker compose up -d --wait
 docker compose ps
 ```
 
-The broker is exposed on `127.0.0.1:1883` for local development.
+The broker is available locally at `mqtts://127.0.0.1:8883`.
 
-### 3. Start the gateway
+Anonymous connections are disabled. TLS, authentication, and topic ACLs are enforced by Mosquitto.
+
+### 7. Start the gateway
 
 In a terminal:
 
 ```bash
-.venv/bin/python -m edge_gateway.gateway
+./scripts/run-gateway.sh
 ```
 
-### 4. Start the telemetry publisher
+### 8. Start the telemetry publisher
 
 In a second terminal:
 
 ```bash
-.venv/bin/python simulator/publisher.py
+./scripts/run-publisher.sh
 ```
 
-The publisher publishes telemetry periodically. The gateway logs
-successfully stored measurements.
+Optional publisher arguments:
 
-Stop either process with `Ctrl+C`. Stop the broker when it is no longer
-needed:
+```bash
+./scripts/run-publisher.sh --device-id sensor-002 --interval 5
+```
+
+The publisher generates telemetry periodically. The gateway validates incoming messages and logs successfully stored measurements.
+
+Stop either process with Ctrl+C.
+
+Stop the broker:
 
 ```bash
 docker compose down
 ```
 
-The named Docker volume preserves the broker's persisted data.
+The named Docker volume preserves Mosquitto persistence data.
 
-## Tests and code quality
+To remove the broker volume as well:
 
-Run the unit tests:
+```bash
+docker compose down -v
+```
+
+## Testing
+
+Run the complete local test suite:
+
+```bash
+./scripts/run-tests.sh
+```
+
+This script:
+- Loads local environment variables.
+- Starts the Mosquitto broker.
+- Runs Ruff.
+- Runs unit and integration tests.
+
+The integration tests require the MQTT credentials and local broker configuration described in the setup section.
+
+Run only the unit and non-broker tests:
 
 ```bash
 .venv/bin/python -m pytest -q
 ```
 
-Run the linter:
+Run the linter independently:
 
 ```bash
 .venv/bin/ruff check .
 ```
 
+Compile Python sources:
+
+```bash
+.venv/bin/python -m compileall -q simulator src tests
+```
+
+## Reconnection test
+
+The MQTT reconnection behavior can be tested manually:
+
+1. Start the broker, gateway, and publisher.
+2. Stop the broker:
+
+   ```bash
+   docker compose stop mosquitto
+   ```
+
+3. Observe the publisher and gateway disconnect and retry.
+4. Restart the broker:
+
+   ```bash
+   docker compose up -d --wait
+   ```
+
+5. Observe both clients reconnect. The gateway resubscribes and telemetry publication resumes.
+
 ## Project structure
 
 ```text
 .
-├── compose.yaml
+├── .github/
+│   └── workflows/
+│       └── ci.yml
 ├── config/
 │   └── mosquitto/
+│       ├── acl_file
 │       └── mosquitto.conf
-├── Dockerfile
-├── pyproject.toml
-├── README.md
+├── scripts/
+│   ├── generate-dev-certs.sh
+│   ├── inspect_db.py
+│   ├── run-gateway.sh
+│   ├── run-publisher.sh
+│   └── run-tests.sh
 ├── simulator/
 │   └── publisher.py
 ├── src/
 │   └── edge_gateway/
 │       ├── gateway.py
+│       ├── processing.py
 │       ├── storage.py
 │       └── telemetry.py
-└── tests/
-    └── unit/
-        └── test_telemetry.py
+├── tests/
+│   ├── integration/
+│   └── unit/
+├── compose.yaml
+├── Dockerfile
+├── pyproject.toml
+└── README.md
 ```
 
-## Current scope
+## Design decisions and limitations
 
-The current MVP runs the gateway and publisher directly on the host while
-Mosquitto runs in Docker Compose. The Dockerfile is an initial step toward
-containerizing the gateway.
+This project focuses on a small, understandable edge architecture rather than introducing unnecessary infrastructure.
 
-Future improvements may include storage tests, end-to-end integration
-tests, reconnection and outage handling, and a fully containerized
-development setup.
+Current design choices:
+- Mosquitto runs in Docker Compose; the Python applications run locally.
+- SQLite provides simple local persistence without an external database.
+- QoS 1 provides at-least-once delivery, so duplicate handling is required.
+- The publisher does not persist or buffer telemetry during broker outages.
+- Development certificates are self-generated and are not production PKI.
+- The simulator is used instead of physical sensor hardware.
+
+The Dockerfile is an initial step toward a fully containerized gateway deployment.
+
+## Future improvements
+
+Potential next steps include:
+- Persistent local buffering during network outages.
+- Hardware sensor integration.
+- Production certificate and secret management.
+- Remote monitoring and deployment.
